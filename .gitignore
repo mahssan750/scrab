@@ -1,0 +1,9 @@
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Raw scrape cache - regenerated on every run, and large. The Excel workbook in
+# output/ is committed; this is not.
+output/products.jsonl
+output/*.log
