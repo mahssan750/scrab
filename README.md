@@ -1,8 +1,30 @@
-# medononline.com price & availability scraper
+# UAE Pharmacy Price and Availability Pipeline
 
 A Playwright scraper that walks the full [medononline.com](https://medononline.com)
 catalogue (Medon Pharmacy, UAE) and exports every product's **price** and
 **availability** to an Excel workbook.
+
+## Portfolio evidence
+
+The committed workbook at `output/medononline_prices.xlsx` is a historical
+catalogue snapshot, not a live inventory feed. A file-level review on
+27 September 2026 found:
+
+| Check | Observed result |
+| --- | --- |
+| Product rows / distinct product URLs | 10,188 / 10,188 |
+| Currency | AED on all 10,188 rows |
+| Missing prices | 0 |
+| Availability | 8,629 in stock; 1,559 out of stock |
+| Missing brand | 3,248 rows (31.88%) |
+| Missing category | 9,704 rows (95.25%) |
+
+This demonstrates extraction, resumable processing and a usable Excel output.
+It does not establish current prices, real-time stock, sales demand, or savings.
+The review checked the existing workbook and source; it did not rerun a live
+collection. Brand and category completeness need improvement before using
+those fields to compare segments. Availability is the storefront label, not
+warehouse stock quantity.
 
 ## What it collects
 
@@ -42,7 +64,7 @@ frozen header) and **Summary** (counts, price range, availability breakdown).
 pip install -r requirements.txt
 playwright install chromium
 
-python scrape_medon.py --fast                 # full catalogue, ~45 min
+python scrape_medon.py --fast                 # full catalogue, price and availability
 python scrape_medon.py                        # full catalogue + category, slow
 python scrape_medon.py --limit 50             # quick sample
 python scrape_medon.py --fast --resume        # continue an interrupted run
@@ -54,10 +76,11 @@ The site loads brand and category client-side, one breadcrumb level at a time,
 via its own API. Waiting for that is what makes a run slow, so there are two modes:
 
 - **`--fast` (recommended).** Skips the hydration wait. Price, availability,
-  name, SKU, stock label and rating are complete; brand is filled in for roughly
-  two thirds of products and category is left blank. ~0.5s per product.
+  name and SKU are collected without waiting for additional hydration. Brand
+  and especially category may be missing; see the committed snapshot checks above.
+  Runtime varies with site response and concurrency.
 - **Default (rich).** Waits for the breadcrumb chain to settle, so category and
-  brand are essentially complete — but each product costs several seconds, and
+  brand can be more complete, but completeness must still be checked. Each product costs several seconds, and
   the site's API slows down under concurrency, so a full run takes hours. Best
   used with `--limit` on a subset, or overnight with `--resume`.
 
@@ -75,11 +98,11 @@ via its own API. Waiting for that is what makes a run slow, so there are two mod
 | `--jsonl PATH` | `output/products.jsonl` | streaming results file |
 | `--headful` | off | show the browser window |
 
-## Politeness
+## Collection behavior
 
-`robots.txt` allows crawling everything except `/api/` and `/order-success/`;
-this scraper only visits public product pages listed in the sitemap and never
-calls the API directly. Images, fonts, stylesheets and media are blocked to keep
+The implementation visits public product pages listed in the sitemap and does
+not call the store API directly. Review the current site terms and crawling
+policy before a new collection; the development notes describe a past observation. Images, fonts, stylesheets and media are blocked to keep
 bandwidth down, and each tab pauses between requests. Keep the concurrency
 modest — the site's own backend is the bottleneck, and pushing it harder makes
 the data worse, not the run faster.
