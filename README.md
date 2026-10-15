@@ -1,108 +1,109 @@
-# UAE Pharmacy Price and Availability Pipeline
+# UAE Pharmacy Catalogue Intelligence Pipeline
 
-A Playwright scraper that walks the full [medononline.com](https://medononline.com)
-catalogue (Medon Pharmacy, UAE) and exports every product's **price** and
-**availability** to an Excel workbook.
+**A Python workflow that collected a documented snapshot of 10,188 public pharmacy product pages**
 
-## Portfolio evidence
+This project converts public product-page information into a structured Excel workbook for reviewing prices, availability and catalogue coverage at scale.
 
-The committed workbook at `output/medononline_prices.xlsx` is a historical
-catalogue snapshot, not a live inventory feed. A file-level review on
-27 September 2026 found:
+## Recruiter quick view
 
-| Check | Observed result |
+| Area | Result |
 | --- | --- |
-| Product rows / distinct product URLs | 10,188 / 10,188 |
-| Currency | AED on all 10,188 rows |
-| Missing prices | 0 |
-| Availability | 8,629 in stock; 1,559 out of stock |
+| **Business goal** | Replace manual product checks with one organized catalogue dataset. |
+| **Scope** | 10,188 distinct UAE pharmacy product URLs. |
+| **Core coverage** | Price, currency and availability recorded for every row in the committed snapshot. |
+| **Output** | A filterable Products sheet plus a management Summary sheet. |
+| **Reliability** | Retries, resume support and streaming results prevent lost progress during long runs. |
+
+## Why this matters
+
+Reviewing thousands of products manually is slow and inconsistent. A structured catalogue can help commercial and e-commerce teams compare assortment, identify availability gaps and prepare pricing analysis.
+
+## Verified historical snapshot
+
+A file-level review of the committed workbook on 27 September 2026 found:
+
+| Check | Result |
+| --- | ---: |
+| Product rows | **10,188** |
+| Distinct product URLs | **10,188** |
+| Missing prices | **0** |
+| Currency | AED on all rows |
+| In-stock labels | **8,629** |
+| Out-of-stock labels | **1,559** |
 | Missing brand | 3,248 rows (31.88%) |
 | Missing category | 9,704 rows (95.25%) |
 
-This demonstrates extraction, resumable processing and a usable Excel output.
-It does not establish current prices, real-time stock, sales demand, or savings.
-The review checked the existing workbook and source; it did not rerun a live
-collection. Brand and category completeness need improvement before using
-those fields to compare segments. Availability is the storefront label, not
-warehouse stock quantity.
+## What the workbook contains
 
-## What it collects
+The Products sheet provides one row per product with fields such as:
 
-| Column | Source | Notes |
-| --- | --- | --- |
-| Product Name | JSON-LD | |
-| SKU | JSON-LD | |
-| Brand | rendered DOM | partially server-rendered; see *Modes* |
-| Category | rendered DOM | breadcrumb chain, rich mode only |
-| Price | JSON-LD | current selling price |
-| Original Price | rendered DOM | struck-through price, discounted items only |
-| Discount % | derived | from original vs. current price |
-| Currency | JSON-LD | AED |
-| Availability | JSON-LD | `In Stock` / `Out of Stock` |
-| Stock Label | rendered DOM | shopper-facing chips, e.g. `In Stock, Limited Stock` |
-| Rating / Reviews | rendered DOM | |
-| Expiry | rendered DOM | shown on short-dated stock |
-| Product URL / Image URL | JSON-LD | |
-| Scraped At (UTC) | — | per-row timestamp |
+- Product name and SKU
+- Current and original price
+- Calculated discount percentage
+- Shopper-facing availability and stock labels
+- Brand and category when available
+- Rating, review count and expiry information when shown
+- Product and image URLs
+- Collection timestamp
 
-The workbook has two sheets: **Products** (one row per product, filterable and
-frozen header) and **Summary** (counts, price range, availability breakdown).
+The Summary sheet provides a quick overview of row counts, price range and availability.
 
-## How it works
+## How the pipeline works
 
-1. Product URLs come from the site's public `sitemap.xml` (~10,200 products).
-2. Each page is opened in headless Chromium.
-3. Price and availability are read from the page's `schema.org/Product` JSON-LD
-   block, which is server-rendered and therefore reliable.
-4. The rendered DOM supplies the extras that only exist after hydration.
-5. Rows stream to `output/products.jsonl` as they are scraped, so an interrupted
-   run can be continued with `--resume`. The workbook is built from that file.
+1. Read product URLs from the site's public sitemap.
+2. Visit each public product page with headless Chromium.
+3. Collect core product, price and availability details.
+4. Save every completed row immediately to a streaming file.
+5. Resume safely after interruption without repeating finished products.
+6. Build a formatted Excel workbook for analysis.
 
-## Usage
+## Reliability choices
 
-```bash
-pip install -r requirements.txt
-playwright install chromium
+- Multiple attempts for temporary page failures
+- Resume mode for long collection runs
+- Modest concurrency and request delays
+- Images, fonts and other heavy assets blocked to reduce bandwidth
+- Separate fast and rich modes for speed versus additional product details
 
-python scrape_medon.py --fast                 # full catalogue, price and availability
-python scrape_medon.py                        # full catalogue + category, slow
-python scrape_medon.py --limit 50             # quick sample
-python scrape_medon.py --fast --resume        # continue an interrupted run
-```
+## Business uses
 
-### Modes
+With suitable quality checks and permission to refresh the data, this type of dataset can support:
 
-The site loads brand and category client-side, one breadcrumb level at a time,
-via its own API. Waiting for that is what makes a run slow, so there are two modes:
+- Assortment and availability reviews
+- Product-level price comparisons
+- Discount monitoring
+- Catalogue completeness checks
+- Prioritizing products that need manual investigation
 
-- **`--fast` (recommended).** Skips the hydration wait. Price, availability,
-  name and SKU are collected without waiting for additional hydration. Brand
-  and especially category may be missing; see the committed snapshot checks above.
-  Runtime varies with site response and concurrency.
-- **Default (rich).** Waits for the breadcrumb chain to settle, so category and
-  brand can be more complete, but completeness must still be checked. Each product costs several seconds, and
-  the site's API slows down under concurrency, so a full run takes hours. Best
-  used with `--limit` on a subset, or overnight with `--resume`.
+## Important limitations
 
-### Options
+- The committed workbook is a **historical snapshot**, not a live stock feed.
+- Availability is the customer-facing website label, not warehouse stock quantity.
+- Brand coverage is incomplete and category coverage is very limited.
+- The data does not show sales demand, profit, commercial savings or competitor performance.
+- The existing workbook was reviewed without rerunning a live collection.
+- Site terms and crawling policy should be reviewed before any new collection.
 
-| Flag | Default | Purpose |
-| --- | --- | --- |
-| `--limit N` | all | scrape only the first N products |
-| `--concurrency N` | 6 | parallel browser tabs |
-| `--delay S` | 0.4 | base pause between requests per tab |
-| `--retries N` | 3 | attempts per product |
-| `--fast` | off | skip the hydration wait |
-| `--resume` | off | skip products already in the JSONL file |
-| `--output PATH` | `output/medononline_prices.xlsx` | workbook path |
-| `--jsonl PATH` | `output/products.jsonl` | streaming results file |
-| `--headful` | off | show the browser window |
+These limits are documented so the output is not presented as more complete or current than it is.
 
-## Collection behavior
+## Run locally
 
-The implementation visits public product pages listed in the sitemap and does
-not call the store API directly. Review the current site terms and crawling
-policy before a new collection; the development notes describe a past observation. Images, fonts, stylesheets and media are blocked to keep
-bandwidth down, and each tab pauses between requests. Keep the concurrency
-modest — the site's own backend is the bottleneck, and pushing it harder makes
-the data worse, not the run faster.
+Install the requirements and the Chromium browser, then choose a small sample before a full run:
+
+    pip install -r requirements.txt
+    playwright install chromium
+    python scrape_medon.py --limit 50
+
+Use **--fast** for core fields, **--resume** to continue an interrupted run and **--output** to choose the Excel file.
+
+## What this project demonstrates
+
+- Python automation for large, repetitive data tasks
+- Web data extraction with error handling
+- Data-quality validation and transparent limitations
+- Streaming and resumable processing
+- Excel output designed for non-technical users
+
+## Tools demonstrated
+
+**Python · Playwright · JSON-LD · Pandas · Excel · Data Quality · Automation**
